@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strings"
 	"sync"
 )
 
@@ -24,7 +23,7 @@ type TokenDB struct {
 }
 
 func (self *TokenDB) GetToken(address string) (*Token, error) {
-	t, found := self.Data[strings.ToLower(address)]
+	t, found := self.Data[l(address)]
 	if !found {
 		return nil, fmt.Errorf("token %s not found", address)
 	}
@@ -32,7 +31,7 @@ func (self *TokenDB) GetToken(address string) (*Token, error) {
 }
 
 func (self *TokenDB) IsToken(address string) bool {
-	_, found := self.Data[strings.ToLower(address)]
+	_, found := self.Data[l(address)]
 	return found
 }
 
@@ -50,7 +49,7 @@ type kyberresp struct {
 func GetKyberTokenDB() (*TokenDB, error) {
 	var err error
 	once.Do(func() {
-		url := "https://api.kyber.network/currencies"
+		url := "https://api.kyber.network/currencies?include_delisted=true"
 		var resp *http.Response
 		resp, err = http.Get(url)
 		if err != nil {
@@ -69,7 +68,7 @@ func GetKyberTokenDB() (*TokenDB, error) {
 		}
 		KyberTokenDB = NewTokenDB()
 		for _, token := range tokens.Data {
-			KyberTokenDB.Data[strings.ToLower(token.Address)] = token
+			KyberTokenDB.Data[l(token.Address)] = token
 		}
 	})
 	return KyberTokenDB, err

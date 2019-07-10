@@ -46,6 +46,85 @@ func GetTokenDecimal(address string) (int, error) {
 	return t.Decimals, nil
 }
 
+func EventsFromInternals(tx *ethutils.TxInfo, wallet string) []Event {
+	result := []Event{}
+	for _, tx := range tx.InternalTxs {
+		abig, ok := big.NewInt(0).SetString(tx.Value, 10)
+		if !ok {
+			fmt.Printf("Converting internal value to big int failed\n")
+			continue
+		}
+		afloat := ethutils.BigToFloat(abig, 18)
+		if afloat == 0 {
+			continue
+		}
+		if l(tx.From) == l(wallet) {
+			if l(tx.To) == l(wallet) {
+				result = append(result, Event{
+					Type:      SELF,
+					InAsset:   "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+					InAmount:  afloat,
+					OutAsset:  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+					OutAmount: afloat,
+				})
+			} else {
+				result = append(result, Event{
+					Type:      WITHDRAW,
+					OutAsset:  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+					OutAmount: afloat,
+				})
+			}
+		} else {
+			if l(tx.To) == l(wallet) {
+				result = append(result, Event{
+					Type:     DEPOSIT,
+					InAsset:  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+					InAmount: afloat,
+				})
+			} else {
+				result = append(result, Event{
+					Type: UNKNOWN,
+				})
+			}
+		}
+	}
+	return result
+}
+
+func EventFromKyberTrade(tx *ethutils.TxInfo, analyzedResult *txanalyzer.TxResult, wallet string) ([]Event, error) {
+	result := []Event{}
+	for _, log := range analyzedResult.Logs {
+		// TODO: check log original address
+		if log.Name == "ExecuteTrade" {
+			outAsset := strings.Split(log.Data[0].Value, " ")[0]
+			outDecimal, err := GetTokenDecimal(outAsset)
+			if err != nil {
+				return result, err
+			}
+			outAmount := ethutils.StringToFloat(strings.Split(log.Data[2].Value, " ")[0], int64(outDecimal))
+			inAsset := strings.Split(log.Data[1].Value, " ")[0]
+			inDecimal, err := GetTokenDecimal(inAsset)
+			if err != nil {
+				return result, err
+			}
+			inAmount := ethutils.StringToFloat(strings.Split(log.Data[3].Value, " ")[0], int64(inDecimal))
+
+			result = append(result, Event{
+				Type:      TRADE,
+				InAsset:   inAsset,
+				InAmount:  inAmount,
+				OutAsset:  outAsset,
+				OutAmount: outAmount,
+			})
+		}
+	}
+	return result, nil
+}
+
+func EventFromTrade(tx *ethutils.TxInfo, analyzedResult *txanalyzer.TxResult, wallet string) ([]Event, error) {
+	return EventFromKyberTrade(tx, analyzedResult, wallet)
+}
+
 func EventsFromLogs(tx *ethutils.TxInfo, analyzedResult *txanalyzer.TxResult, wallet string) ([]Event, error) {
 	result := []Event{}
 	for _, log := range tx.Receipt.Logs {

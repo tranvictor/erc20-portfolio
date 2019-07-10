@@ -16,7 +16,7 @@ func GetTxDB() (TxDB, error) {
 	return NewTxDataJSONDB()
 }
 
-func GetAllTxInfo(hashes []string) ([]*ethutils.TxInfo, error) {
+func GetAllTxInfo(hashes []string, internalTxs map[string][]ethutils.InternalTx) ([]*ethutils.TxInfo, error) {
 	result := []*ethutils.TxInfo{}
 	db, err := GetTxDB()
 	rd := reader.NewEthReader()
@@ -29,6 +29,13 @@ func GetAllTxInfo(hashes []string) ([]*ethutils.TxInfo, error) {
 			return []*ethutils.TxInfo{}, err
 		} else {
 			if txinfo != nil {
+				if len(txinfo.InternalTxs) == 0 && len(internalTxs[l(hash)]) > 0 {
+					txinfo.InternalTxs = internalTxs[l(hash)]
+					err = db.StoreTxs([]*ethutils.TxInfo{txinfo})
+					if err != nil {
+						return []*ethutils.TxInfo{}, err
+					}
+				}
 				result = append(result, txinfo)
 			} else {
 				// get receipt from blockchain
@@ -36,6 +43,9 @@ func GetAllTxInfo(hashes []string) ([]*ethutils.TxInfo, error) {
 				tx, err := rd.TxInfoFromHash(hash)
 				if err != nil {
 					return []*ethutils.TxInfo{}, err
+				}
+				if len(tx.InternalTxs) == 0 && len(internalTxs[l(hash)]) > 0 {
+					tx.InternalTxs = internalTxs[l(hash)]
 				}
 				err = db.StoreTxs([]*ethutils.TxInfo{&tx})
 				if err != nil {
